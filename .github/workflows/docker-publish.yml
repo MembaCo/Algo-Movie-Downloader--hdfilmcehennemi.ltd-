@@ -32,16 +32,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. Adım: Docker imaj etiketini küçük harfe çevirir.
-      - name: Generate lower-case image tag
-        id: image_tag
-        run: echo "tag=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      # 3. Adım: Docker imajı için meta verileri (etiketler, etiketler) çıkarır.
+      # Bu adım, depo adındaki geçersiz karakterlerden kaçınarak güvenli bir imaj adı oluşturur.
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/algo-video-bot
 
       # 4. Adım: Dockerfile'ı kullanarak imajı oluşturur ve GHCR'ye push'lar.
-      # Küçük harfe çevrilmiş etiket burada kullanılır.
+      # Bir önceki adımda oluşturulan güvenli etiketler burada kullanılır.
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ steps.image_tag.outputs.tag }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
