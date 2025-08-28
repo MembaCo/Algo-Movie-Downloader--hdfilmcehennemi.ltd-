@@ -1,24 +1,21 @@
 # @author: MembaCo.
-# CasaOS için özel olarak yapılandırılmış ve güncellenmiş Docker Compose dosyası.
+# CasaOS için test amaçlı :main etiketi ile güncellenmiş Docker Compose dosyası.
 
 services:
   algo-video-downloader:
-    # İmajın tam adını ve :latest etiketini belirtiyoruz
-    image: ghcr.io/membaco/algo-video-downloader:latest
+    # İmaj etiketini :latest yerine :main olarak deniyoruz
+    image: ghcr.io/membaco/algo-video-downloader:main
     container_name: algo-video-downloader
     ports:
       - 5000:5000
     volumes:
-      # İndirilen videolar için klasör bağlantısı
       - type: bind
         source: /DATA/AppData/algo-video-downloader/downloads
         target: /app/downloads
-      # Veritabanı ve log dosyaları gibi kalıcı veriler için klasör bağlantısı
       - type: bind
         source: /DATA/AppData/algo-video-downloader/data
         target: /app/data
     environment:
-      # CasaOS, bu alanlar için sizden değer girmenizi isteyecektir.
       - SECRET_KEY= # Buraya çok gizli ve rastgele bir anahtar yazın
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD_HASH= # Buraya ürettiğiniz parola hash'ini yapıştırın
