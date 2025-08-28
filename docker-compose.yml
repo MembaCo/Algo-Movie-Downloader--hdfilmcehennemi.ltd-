@@ -1,0 +1,41 @@
+# @author: MembaCo.
+# CasaOS için özel olarak yapılandırılmış Docker Compose dosyası.
+
+services:
+  algo-video-bot:
+    image: ghcr.io/membaco/algo-video-bot:latest
+    container_name: algo-video-bot
+    ports:
+      - 5000:5000
+    volumes:
+      # İndirilen videolar için klasör bağlantısı
+      - type: bind
+        source: /DATA/AppData/algo-video-bot/downloads
+        target: /app/downloads
+      # Veritabanı ve log dosyaları gibi kalıcı veriler için klasör bağlantısı
+      - type: bind
+        source: /DATA/AppData/algo-video-bot/data
+        target: /app/data
+    environment:
+      # CasaOS, bu alanlar için sizden değer girmenizi isteyecektir.
+      - SECRET_KEY= # Buraya çok gizli ve rastgele bir anahtar yazın
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD_HASH= # Buraya ürettiğiniz parola hash'ini yapıştırın
+    restart: unless-stopped
+    shm_size: 2g
+    x-casaos:
+      architectures:
+        - amd64
+      main: algo-video-bot
+      description:
+        en_us: Web tabanlı video indirme yöneticisi.
+      tagline:
+        en_us: Kişisel Video İndirme Yöneticiniz
+      developer: MembaCo
+      author: MembaCo
+      icon: https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/movie-clapper.png
+      thumbnail: ""
+      title:
+        en_us: Algo Video Bot
+      category: Utilities
+      port_map: "5000"

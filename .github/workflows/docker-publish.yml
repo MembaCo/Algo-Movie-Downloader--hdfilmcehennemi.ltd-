@@ -1,0 +1,47 @@
+# @author: MembaCo.
+
+# Workflow'un adı
+name: Docker Image CI
+
+# Bu workflow'un ne zaman tetikleneceğini belirtir: 'main' branch'ine her push yapıldığında.
+on:
+  push:
+    branches: [ "main" ]
+
+# Yapılacak işleri tanımlar
+jobs:
+  build-and-push:
+    # İşin çalışacağı sanal ortam (en güncel Ubuntu)
+    runs-on: ubuntu-latest
+    # Bu işin GitHub Packages'a yazma iznine sahip olması gerekir.
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # 1. Adım: Repodaki kodları sanal ortama indirir.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Adım: GitHub Container Registry'de (ghcr.io) oturum açar.
+      # GITHUB_TOKEN, GitHub tarafından bu işlem için otomatik olarak sağlanır.
+      - name: Log in to the GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 3. Adım: Docker imaj etiketini küçük harfe çevirir.
+      - name: Generate lower-case image tag
+        id: image_tag
+        run: echo "tag=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      # 4. Adım: Dockerfile'ı kullanarak imajı oluşturur ve GHCR'ye push'lar.
+      # Küçük harfe çevrilmiş etiket burada kullanılır.
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ steps.image_tag.outputs.tag }}:latest

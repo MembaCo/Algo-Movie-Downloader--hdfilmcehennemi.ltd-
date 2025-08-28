@@ -1,0 +1,20 @@
+# Dockerfile ve docker-compose dosyasını build context'e dahil etme
+Dockerfile
+docker-compose.yml
+
+# Git ve ortam dosyaları
+.git
+.gitignore
+.env
+
+# Python sanal ortamı ve cache dosyaları
+.venv
+__pycache__/
+*.pyc
+
+# Uygulamanın çalışma zamanında oluşturduğu ve kalıcı olması gereken veriler
+# Bunları volume olarak bağlıyoruz, imajın içine kopyalamaya gerek yok.
+downloads/
+database.db
+app.log
+*.log
