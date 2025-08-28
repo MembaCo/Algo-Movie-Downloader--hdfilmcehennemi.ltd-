@@ -38,7 +38,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/algo-video-bot
+          images: ghcr.io/${{ github.repository_owner }}/algo-video-downloader
 
       # 4. Adım: Dockerfile'ı kullanarak imajı oluşturur ve GHCR'ye push'lar.
       # Bir önceki adımda oluşturulan güvenli etiketler burada kullanılır.
