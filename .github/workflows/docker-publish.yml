@@ -33,7 +33,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # 3. Adım: Docker imajı için meta verileri (etiketler, etiketler) çıkarır.
-      # Bu adım, depo adındaki geçersiz karakterlerden kaçınarak güvenli bir imaj adı oluşturur.
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -41,7 +40,6 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/algo-video-downloader
 
       # 4. Adım: Dockerfile'ı kullanarak imajı oluşturur ve GHCR'ye push'lar.
-      # Bir önceki adımda oluşturulan güvenli etiketler burada kullanılır.
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:

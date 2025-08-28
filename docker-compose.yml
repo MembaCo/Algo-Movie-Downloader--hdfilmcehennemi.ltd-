@@ -1,20 +1,20 @@
 # @author: MembaCo.
-# CasaOS için özel olarak yapılandırılmış Docker Compose dosyası.
+# CasaOS için özel olarak yapılandırılmış ve güncellenmiş Docker Compose dosyası.
 
 services:
-  Algo-Movie-Downloader--hdfilmcehennemi.ltd-:
-    image: ghcr.io/membaco/Algo-Movie-Downloader--hdfilmcehennemi.ltd-:latest
-    container_name: Algo-Movie-Downloader--hdfilmcehennemi.ltd-
+  algo-video-downloader:
+    image: ghcr.io/membaco/algo-video-downloader:latest
+    container_name: algo-video-downloader
     ports:
       - 5000:5000
     volumes:
       # İndirilen videolar için klasör bağlantısı
       - type: bind
-        source: /DATA/AppData/Algo-Movie-Downloader--hdfilmcehennemi.ltd-/downloads
+        source: /DATA/AppData/algo-video-downloader/downloads
         target: /app/downloads
       # Veritabanı ve log dosyaları gibi kalıcı veriler için klasör bağlantısı
       - type: bind
-        source: /DATA/AppData/Algo-Movie-Downloader--hdfilmcehennemi.ltd-/data
+        source: /DATA/AppData/algo-video-downloader/data
         target: /app/data
     environment:
       # CasaOS, bu alanlar için sizden değer girmenizi isteyecektir.
@@ -26,16 +26,16 @@ services:
     x-casaos:
       architectures:
         - amd64
-      main: Algo-Movie-Downloader--hdfilmcehennemi.ltd-
+      main: algo-video-downloader
       description:
         en_us: Web tabanlı video indirme yöneticisi.
       tagline:
         en_us: Kişisel Video İndirme Yöneticiniz
       developer: MembaCo
       author: MembaCo
-      icon: https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/movie-clapper.png
+      icon: https://www.hdfilmcehennemi.ltd/wp-content/uploads/2023/11/favicon.webp
       thumbnail: ""
       title:
-        en_us: Algo Video Bot
+        en_us: Algo Video Downloader
       category: Utilities
       port_map: "5000"
