@@ -11,7 +11,7 @@ import config
 # Log dosyasının tam yolunu belirliyoruz.
 LOG_FILE = os.path.join(config.DATA_DIR, "app.log")
 
-
+ 
 def setup_logging():
     """Uygulama genelinde kullanılacak merkezi loglama yapılandırmasını kurar."""
     logger = logging.getLogger()

@@ -77,7 +77,7 @@ def _scrape_from_html(soup):
         logger.error("Yedek HTML kazıma yöntemi sırasında hata oluştu.", exc_info=True)
         return None
 
-
+ 
 def scrape_metadata(url):
     """
     BeautifulSoup ile bir URL'den detaylı film bilgilerini çeker.

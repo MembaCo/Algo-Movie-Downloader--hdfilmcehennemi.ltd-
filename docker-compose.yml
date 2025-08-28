@@ -2,19 +2,19 @@
 # CasaOS için özel olarak yapılandırılmış Docker Compose dosyası.
 
 services:
-  algo-video-bot:
-    image: ghcr.io/membaco/algo-video-bot:latest
-    container_name: algo-video-bot
+  Algo-Movie-Downloader--hdfilmcehennemi.ltd-:
+    image: ghcr.io/membaco/Algo-Movie-Downloader--hdfilmcehennemi.ltd-:latest
+    container_name: Algo-Movie-Downloader--hdfilmcehennemi.ltd-
     ports:
       - 5000:5000
     volumes:
       # İndirilen videolar için klasör bağlantısı
       - type: bind
-        source: /DATA/AppData/algo-video-bot/downloads
+        source: /DATA/AppData/Algo-Movie-Downloader--hdfilmcehennemi.ltd-/downloads
         target: /app/downloads
       # Veritabanı ve log dosyaları gibi kalıcı veriler için klasör bağlantısı
       - type: bind
-        source: /DATA/AppData/algo-video-bot/data
+        source: /DATA/AppData/Algo-Movie-Downloader--hdfilmcehennemi.ltd-/data
         target: /app/data
     environment:
       # CasaOS, bu alanlar için sizden değer girmenizi isteyecektir.
@@ -26,7 +26,7 @@ services:
     x-casaos:
       architectures:
         - amd64
-      main: algo-video-bot
+      main: Algo-Movie-Downloader--hdfilmcehennemi.ltd-
       description:
         en_us: Web tabanlı video indirme yöneticisi.
       tagline:

@@ -8,6 +8,7 @@ backend/__pycache__/
 backend/*/__pycache__/
 .venv
 
+
 # Veritabanı ve Kalıcı Veriler
 downloads/
 database.db

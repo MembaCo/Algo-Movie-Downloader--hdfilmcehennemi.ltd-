@@ -1,6 +1,6 @@
 Changelog
 Tüm önemli değişiklikler bu dosyada belgelenmektedir.
-
+ 
 [1.0.0] - 2025-08-18
 Bu, projenin ilk stabil ve zengin özellikli sürümüdür. Manuel indirme yeteneklerinin üzerine, tam otomasyon ve gelişmiş hata yönetimi mekanizmaları eklenmiştir.
 

@@ -51,3 +51,4 @@ EXPOSE 5000
 
 # Konteyner başlatıldığında çalıştırılacak komut.
 CMD ["python", "app.py"]
+ 

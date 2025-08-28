@@ -35,7 +35,7 @@ def close_db(e=None):
         db.close()
         logger.debug("Veritabanı bağlantısı kapatıldı.")
 
-
+ 
 def setup_database():
     """Veritabanı şemasını (tabloları) oluşturur veya günceller."""
     try:
