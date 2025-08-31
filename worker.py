@@ -13,23 +13,25 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
+from selenium.common.exceptions import TimeoutException
 
 import config
 from logging_config import setup_logging
-from database import get_all_settings
+from database import (
+    get_all_settings as get_all_settings_from_db,
+)  # İsim çakışmasını önlemek için yeniden adlandır
 
 logger = logging.getLogger(__name__)
 
 
-def update_status(video_id, status=None, source_url=None, progress=None, filepath=None):
+# --- YENİ: Worker-içi Veritabanı Güncelleme Fonksiyonu ---
+def _update_status_worker(
+    conn, video_id, status=None, source_url=None, progress=None, filepath=None
+):
     """
-    Veritabanındaki bir videonun durumunu, ilerlemesini veya dosya yolunu günceller.
-    Bu fonksiyon, ana Flask uygulamasından bağımsız olarak kendi veritabanı bağlantısını kurar.
+    Mevcut bir veritabanı bağlantısını kullanarak videonun durumunu günceller.
     """
-    conn = None
     try:
-        conn = sqlite3.connect(config.DATABASE)
         cursor = conn.cursor()
         if status:
             cursor.execute(
@@ -50,12 +52,9 @@ def update_status(video_id, status=None, source_url=None, progress=None, filepat
         conn.commit()
     except sqlite3.Error as e:
         logger.error(
-            f"ID {video_id} için veritabanı güncellenirken hata oluştu: {e}",
+            f"ID {video_id} için worker DB güncellemesinde hata: {e}",
             exc_info=True,
         )
-    finally:
-        if conn:
-            conn.close()
 
 
 def find_manifest_url(target_url):
@@ -104,7 +103,9 @@ def find_manifest_url(target_url):
             driver.quit()
 
 
+# --- GÜNCELLENDİ: Akıllı Hata Yönetimi ---
 def download_with_yt_dlp(
+    conn,
     video_id,
     manifest_url,
     headers,
@@ -115,7 +116,6 @@ def download_with_yt_dlp(
 ):
     """yt-dlp ile videoyu indirir ve ilerlemeyi veritabanına yazar."""
     output_template = os.path.join(download_folder, f"{filename_template}.%(ext)s")
-
     command = [
         "yt-dlp",
         "--cookies",
@@ -129,10 +129,8 @@ def download_with_yt_dlp(
         "-o",
         output_template,
     ]
-
     if speed_limit:
         command.extend(["--limit-rate", speed_limit])
-
     for key, value in headers.items():
         command.extend(["--add-header", f"{key}: {value}"])
     command.append(manifest_url)
@@ -151,70 +149,77 @@ def download_with_yt_dlp(
         if progress_match:
             try:
                 progress = float(progress_match.group(1))
-                update_status(video_id, progress=progress)  # int() kaldırıldı
+                _update_status_worker(conn, video_id, progress=progress)
             except (ValueError, IndexError):
                 continue
     process.wait()
+
     if process.returncode == 0:
         return True, "İndirme tamamlandı."
     else:
-        return False, full_output
+        # Akıllı hata analizi
+        if "403 Forbidden" in full_output:
+            error_message = (
+                "Hata: Sunucu erişimi reddetti (403). Çerezler geçersiz olabilir."
+            )
+        elif "No space left on device" in full_output:
+            error_message = "Hata: Diskte yeterli alan yok."
+        elif "HTTP Error 404" in full_output:
+            error_message = "Hata: Video kaynağı bulunamadı (404)."
+        else:
+            last_lines = "\n".join(full_output.strip().split("\n")[-5:])
+            error_message = f"Hata: İndirme başarısız oldu. Detay: ...{last_lines}"
+
+        return False, error_message
 
 
+# --- GÜNCELLENDİ: Ana Worker Fonksiyonu (Tek Veritabanı Bağlantısı) ---
 def process_video(video_id):
     """Tek bir video için tüm bulma ve indirme sürecini yönetir."""
     global logger
-    logger = setup_logging()
+    logger = setup_logging()  # Her proseste loglamayı yeniden kur
 
     conn = None
-    video = None
-    settings = {}
+    cookie_filepath = f"cookies_{video_id}.txt"
     try:
+        # Fonksiyon başında tek bir veritabanı bağlantısı aç
         conn = sqlite3.connect(config.DATABASE)
         conn.row_factory = sqlite3.Row
+
         video = conn.execute(
             "SELECT * FROM videos WHERE id = ?", (video_id,)
         ).fetchone()
-        settings = get_all_settings(conn)
-    except sqlite3.Error as e:
-        logger.error(
-            f"ID {video_id} için veritabanından veri okunurken hata: {e}", exc_info=True
-        )
-    finally:
-        if conn:
-            conn.close()
+        # Ayarları alırken db.py'daki fonksiyonu kullan, bu da yeni bir bağlantı açabilir.
+        # Bu yüzden worker için özel bir get_settings yazmak daha iyi olabilir ya da
+        # mevcut bağlantıyı ona geçebiliriz. Şimdilik bu şekilde bırakıyoruz.
+        settings = get_all_settings_from_db(conn)
 
-    if not video or not settings:
-        logger.error(f"Veritabanında video ID {video_id} veya ayarlar bulunamadı.")
-        return
+        if not video or not settings:
+            logger.error(f"Veritabanında video ID {video_id} veya ayarlar bulunamadı.")
+            return
 
-    download_folder = settings.get("DOWNLOADS_FOLDER", "downloads")
-    if not os.path.exists(download_folder):
-        os.makedirs(download_folder)
+        download_folder = settings.get("DOWNLOADS_FOLDER", "downloads")
+        if not os.path.exists(download_folder):
+            os.makedirs(download_folder)
 
-    cookie_filepath = f"cookies_{video_id}.txt"
-    try:
         logger.info(f"ID {video_id}: Kaynak adresi aranıyor... URL: {video['url']}")
         manifest_url, iframe_src, headers, cookies = find_manifest_url(video["url"])
+
         if manifest_url:
             with open(cookie_filepath, "w", encoding="utf-8") as f:
                 f.write("# Netscape HTTP Cookie File\n")
                 for cookie in cookies:
                     if "name" not in cookie or "value" not in cookie:
                         continue
-                    domain = cookie.get("domain", "")
-                    include_subdomains = "TRUE" if domain.startswith(".") else "FALSE"
-                    path = cookie.get("path", "/")
-                    secure = "TRUE" if cookie.get("secure") else "FALSE"
-                    expiry = int(cookie.get("expiry", 0))
-                    name = cookie["name"]
-                    value = cookie["value"]
                     f.write(
-                        f"{domain}\t{include_subdomains}\t{path}\t{secure}\t{expiry}\t{name}\t{value}\n"
+                        f"{cookie.get('domain', '')}\t{'TRUE' if cookie.get('domain', '').startswith('.') else 'FALSE'}\t{cookie.get('path', '/')}\t{'TRUE' if cookie.get('secure') else 'FALSE'}\t{int(cookie.get('expiry', 0))}\t{cookie['name']}\t{cookie['value']}\n"
                     )
 
-            update_status(video_id, status="İndiriliyor", source_url=manifest_url)
+            _update_status_worker(
+                conn, video_id, status="İndiriliyor", source_url=manifest_url
+            )
 
+            # Dosya adı şablonu
             filename_template_str = settings.get("FILENAME_TEMPLATE", "{title}")
             try:
                 filename_base = filename_template_str.format(
@@ -230,6 +235,7 @@ def process_video(video_id):
                 )
                 filename_base = video["title"] or "Bilinmeyen Film"
 
+            # Güvenli dosya adı
             def to_ascii_safe(text):
                 text = (
                     str(text)
@@ -237,15 +243,11 @@ def process_video(video_id):
                     .replace("İ", "I")
                     .replace("ğ", "g")
                     .replace("Ğ", "G")
-                )
-                text = (
-                    text.replace("ü", "u")
+                    .replace("ü", "u")
                     .replace("Ü", "U")
                     .replace("ş", "s")
                     .replace("Ş", "S")
-                )
-                text = (
-                    text.replace("ö", "o")
+                    .replace("ö", "o")
                     .replace("Ö", "O")
                     .replace("ç", "c")
                     .replace("Ç", "C")
@@ -261,6 +263,7 @@ def process_video(video_id):
             )
 
             success, message = download_with_yt_dlp(
+                conn,
                 video_id,
                 manifest_url,
                 headers,
@@ -269,6 +272,7 @@ def process_video(video_id):
                 safe_filename_base,
                 settings.get("SPEED_LIMIT"),
             )
+
             if success:
                 search_pattern = os.path.join(
                     download_folder, f"{safe_filename_base}.*"
@@ -276,7 +280,8 @@ def process_video(video_id):
                 files = glob.glob(search_pattern)
                 if files:
                     final_filepath = files[0]
-                    update_status(
+                    _update_status_worker(
+                        conn,
                         video_id,
                         status="Tamamlandı",
                         progress=100,
@@ -286,24 +291,37 @@ def process_video(video_id):
                         f"ID {video_id}: İndirme başarıyla tamamlandı. Dosya: {final_filepath}"
                     )
                 else:
-                    update_status(
-                        video_id, status="Hata: Dosya bulunamadı", progress=100
+                    _update_status_worker(
+                        conn,
+                        video_id,
+                        status="Hata: İndirilen dosya bulunamadı",
+                        progress=100,
                     )
                     logger.error(
                         f"ID {video_id}: Dosya bulunamadı. Aranan: {search_pattern}"
                     )
             else:
-                update_status(video_id, status="Hata: İndirilemedi")
+                # message, download_with_yt_dlp'den gelen akıllı hata mesajıdır.
+                _update_status_worker(conn, video_id, status=message)
                 logger.error(f"ID {video_id}: İndirme hatası - {message}")
         else:
-            update_status(video_id, status="Hata: Kaynak bulunamadı")
+            _update_status_worker(
+                conn, video_id, status="Hata: Video kaynağı bulunamadı"
+            )
             logger.warning(f"ID {video_id}: Manifest URL bulunamadı.")
-    except Exception:
+
+    except Exception as e:
         logger.exception(
-            f"ID {video_id}: process_video içinde beklenmedik bir genel hata oluştu."
+            f"ID {video_id}: process_video içinde beklenmedik bir genel hata oluştu: {e}"
         )
-        update_status(video_id, status="Hata: Genel")
+        if conn:  # Hata durumunda da durumu güncellemeye çalış
+            _update_status_worker(
+                conn, video_id, status="Hata: Beklenmedik Sistem Hatası"
+            )
     finally:
+        # Her durumda (başarı veya hata) bağlantıyı kapat ve çerez dosyasını sil
+        if conn:
+            conn.close()
         if os.path.exists(cookie_filepath):
             os.remove(cookie_filepath)
 
@@ -317,4 +335,3 @@ if __name__ == "__main__":
         logger.warning(
             "Bu script, app.py tarafından bir video ID'si ile çağrılmalıdır."
         )
- 

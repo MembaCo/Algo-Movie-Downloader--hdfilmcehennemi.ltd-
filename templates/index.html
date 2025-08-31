@@ -7,7 +7,6 @@
     <title>Video İndirme Yöneticisi</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Koyu Tema için Durum Renkleri */
         .status-sırada {
             background-color: #312e81;
             color: #e0e7ff;
@@ -174,7 +173,7 @@
                                 İşlemler</th>
                         </tr>
                     </thead>
-                    <tbody class="bg-gray-800 divide-y divide-gray-700">
+                    <tbody id="video-queue-body" class="bg-gray-800 divide-y divide-gray-700">
                         {% for video in videos %}
                         <tr id="video-row-{{ video.id }}">
                             <td class="px-6 py-4 whitespace-nowrap align-top">
@@ -185,9 +184,7 @@
                                     style="display: none;">
                                     <div id="progress-bar-{{ video.id }}"
                                         class="progress-bar flex items-center justify-center text-xs font-medium"
-                                        style="width: 0%;">
-                                        <span id="progress-text-{{ video.id }}">0%</span>
-                                    </div>
+                                        style="width: 0%;"><span id="progress-text-{{ video.id }}">0%</span></div>
                                 </div>
                             </td>
                             <td class="px-6 py-4 align-top">
@@ -198,12 +195,10 @@
                             <td class="px-6 py-4 text-sm text-gray-300 align-top">
                                 <div class="font-bold text-base text-indigo-400">{{ video.title or 'Başlık Bilinmiyor'
                                     }}</div>
-                                <div class="mt-1">
-                                    <span class="font-semibold">IMDb:</span> <span class="text-yellow-400 font-bold">{{
-                                        video.imdb_score }}</span> |
-                                    <span class="font-semibold">Yıl:</span> {{ video.year }} |
-                                    <span class="font-semibold">Tür:</span> {{ video.genre }}
-                                </div>
+                                <div class="mt-1"><span class="font-semibold">IMDb:</span> <span
+                                        class="text-yellow-400 font-bold">{{ video.imdb_score }}</span> | <span
+                                        class="font-semibold">Yıl:</span> {{ video.year }} | <span
+                                        class="font-semibold">Tür:</span> {{ video.genre }}</div>
                                 <p class="mt-2 text-xs text-gray-400 max-h-24 overflow-auto">{{ video.description }}</p>
                                 <div class="mt-2 text-xs">
                                     <p class="text-gray-400"><span class="font-semibold">Yönetmen:</span> {{
@@ -224,26 +219,23 @@
                                     <form action="{{ url_for('start_download', video_id=video.id) }}" method="post">
                                         <button type="submit" class="btn btn-blue font-semibold">Yeniden İndir</button>
                                     </form>
-                                    {% if video.filepath %}
-                                    <form action="{{ url_for('delete_file', video_id=video.id) }}" method="post"
+                                    {% if video.filepath %}<form
+                                        action="{{ url_for('delete_file', video_id=video.id) }}" method="post"
                                         onsubmit="return confirm('Bu dosyayı diskten kalıcı olarak silmek istediğinizden emin misiniz?');">
                                         <button type="submit" class="btn btn-purple font-semibold">Disk'ten Sil</button>
-                                    </form>
-                                    {% endif %}
+                                    </form>{% endif %}
                                     {% else %}
                                     <form action="{{ url_for('start_download', video_id=video.id) }}" method="post">
-                                        <button type="submit" class="btn btn-green font-semibold">Başlat</button>
-                                    </form>
+                                        <button type="submit" class="btn btn-green font-semibold">Başlat</button></form>
                                     {% endif %}
                                     <form action="{{ url_for('delete_video', video_id=video.id) }}" method="post"
                                         onsubmit="return confirm('Bu kaydı silmek istediğinizden emin misiniz?');">
-                                        <button type="submit" class="btn btn-red font-semibold">Sil</button>
-                                    </form>
+                                        <button type="submit" class="btn btn-red font-semibold">Sil</button></form>
                                 </div>
                             </td>
                         </tr>
                         {% else %}
-                        <tr>
+                        <tr id="no-videos-row">
                             <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">Kuyruk boş.</td>
                         </tr>
                         {% endfor %}
@@ -254,6 +246,52 @@
         <footer class="text-center text-sm text-gray-500 py-4 mt-4">Sürüm {{ version }}</footer>
     </main>
     <script>
+        // --- YENİ: Akıcı Arayüz Güncelleme Scripti ---
+        function createVideoRow(video) {
+            const statusSimple = (video.status || '').split(':')[0].toLowerCase().replace(/[^a-z0-9]/gi, '');
+            const actionsHtml = createActionsHtml(video);
+
+            return `
+                <td class="px-6 py-4 whitespace-nowrap align-top">
+                    <span id="status-text-${video.id}" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full status-${statusSimple}">${video.status || ''}</span>
+                    <div id="progress-container-${video.id}" class="mt-2 w-full progress-bar-container" style="display: none;">
+                        <div id="progress-bar-${video.id}" class="progress-bar flex items-center justify-center text-xs font-medium" style="width: 0%;"><span id="progress-text-${video.id}">0%</span></div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 align-top">
+                    <img id="poster-${video.id}" src="${video.poster_url || 'https://via.placeholder.com/100x150.png?text=Poster+Yok'}" alt="Film Posteri" class="w-20 rounded shadow-lg">
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-300 align-top">
+                    <div class="font-bold text-base text-indigo-400">${video.title || 'Başlık Bilinmiyor'}</div>
+                    <div class="mt-1"><span class="font-semibold">IMDb:</span> <span class="text-yellow-400 font-bold">${video.imdb_score || 'N/A'}</span> | <span class="font-semibold">Yıl:</span> ${video.year || 'N/A'} | <span class="font-semibold">Tür:</span> ${video.genre || 'N/A'}</div>
+                    <p class="mt-2 text-xs text-gray-400 max-h-24 overflow-auto">${video.description || ''}</p>
+                    <div class="mt-2 text-xs"><p class="text-gray-400"><span class="font-semibold">Yönetmen:</span> ${video.director || 'N/A'}</p><p class="text-gray-400 truncate"><span class="font-semibold">Oyuncular:</span> ${video.cast || 'N/A'}</p></div>
+                    <div class="mt-2 text-xs text-gray-500 truncate" title="${video.url || ''}">${video.url || ''}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium align-top">
+                    <div id="actions-${video.id}" class="flex items-center space-x-4">${actionsHtml}</div>
+                </td>
+            `;
+        }
+
+        function createActionsHtml(video) {
+            let html = '';
+            const isWorking = ['Kaynak aranıyor...', 'İndiriliyor'].includes(video.status);
+
+            if (isWorking) {
+                html += `<form action="/stop/${video.id}" method="post"><button type="submit" class="btn btn-yellow font-semibold">Durdur</button></form>`;
+            } else if (video.status === 'Tamamlandı') {
+                html += `<form action="/start/${video.id}" method="post"><button type="submit" class="btn btn-blue font-semibold">Yeniden İndir</button></form>`;
+                if (video.filepath) {
+                    html += `<form action="/delete_file/${video.id}" method="post" onsubmit="return confirm('Bu dosyayı diskten kalıcı olarak silmek istediğinizden emin misiniz?');"><button type="submit" class="btn btn-purple font-semibold">Disk'ten Sil</button></form>`;
+                }
+            } else {
+                html += `<form action="/start/${video.id}" method="post"><button type="submit" class="btn btn-green font-semibold">Başlat</button></form>`;
+            }
+            html += `<form action="/delete/${video.id}" method="post" onsubmit="return confirm('Bu kaydı silmek istediğinizden emin misiniz?');"><button type="submit" class="btn btn-red font-semibold">Sil</button></form>`;
+            return html;
+        }
+
         function updateUI() {
             fetch('/status')
                 .then(response => {
@@ -267,7 +305,9 @@
                     const videos = data.videos;
                     const autoDownloadEnabled = data.auto_download_enabled;
                     const autoDownloadBtn = document.getElementById('auto-download-btn');
+                    const videoQueueBody = document.getElementById('video-queue-body');
 
+                    // Otomatik indirme butonunu güncelle
                     if (autoDownloadEnabled) {
                         autoDownloadBtn.textContent = 'Otomatik İndirmeyi Durdur';
                         autoDownloadBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700';
@@ -276,56 +316,70 @@
                         autoDownloadBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700';
                     }
 
-                    const displayedVideoRows = document.querySelectorAll('tbody tr[id^="video-row-"]');
-                    const receivedVideoCount = Object.keys(videos).length;
+                    const receivedVideoIds = new Set(Object.keys(videos).map(id => parseInt(id)));
+                    const displayedVideoRows = videoQueueBody.querySelectorAll('tr[id^="video-row-"]');
+                    const displayedVideoIds = new Set(Array.from(displayedVideoRows).map(row => parseInt(row.id.replace('video-row-', ''))));
 
-                    if (displayedVideoRows.length !== receivedVideoCount && receivedVideoCount > 0) {
-                        if (!sessionStorage.getItem('isReloading')) {
-                            sessionStorage.setItem('isReloading', 'true');
-                            window.location.reload();
-                            return;
+                    // Silinmiş videoları UI'dan kaldır
+                    displayedVideoRows.forEach(row => {
+                        const videoId = parseInt(row.id.replace('video-row-', ''));
+                        if (!receivedVideoIds.has(videoId)) {
+                            row.remove();
                         }
-                    }
-                    if (displayedVideoRows.length === receivedVideoCount) {
-                        sessionStorage.removeItem('isReloading');
-                    }
+                    });
 
+                    // Yeni ve mevcut videoları güncelle/ekle
                     for (const id in videos) {
                         const video = videos[id];
-                        const row = document.getElementById(`video-row-${id}`);
-                        if (!row) continue;
+                        let row = document.getElementById(`video-row-${id}`);
 
-                        const statusText = document.getElementById(`status-text-${id}`);
-                        const progressContainer = document.getElementById(`progress-container-${id}`);
-                        const progressBar = document.getElementById(`progress-bar-${id}`);
-                        const progressText = document.getElementById(`progress-text-${id}`);
-                        const posterImg = document.getElementById(`poster-${id}`);
+                        if (!row) { // Video UI'da yoksa, yeni satır oluştur
+                            row = document.createElement('tr');
+                            row.id = `video-row-${id}`;
+                            row.innerHTML = createVideoRow(video);
+                            videoQueueBody.appendChild(row);
+                        } else { // Video UI'da varsa, içeriğini güncelle
+                            // Durum ve ilerleme
+                            const statusText = document.getElementById(`status-text-${id}`);
+                            const progressContainer = document.getElementById(`progress-container-${id}`);
+                            const progressBar = document.getElementById(`progress-bar-${id}`);
+                            const progressText = document.getElementById(`progress-text-${id}`);
 
-                        if (posterImg && video.poster_url) posterImg.src = video.poster_url;
+                            const simpleStatus = (video.status || '').split(':')[0].toLowerCase().replace(/[^a-z0-9]/gi, '');
+                            statusText.textContent = video.status;
+                            statusText.className = `px-2 inline-flex text-xs leading-5 font-semibold rounded-full status-${simpleStatus}`;
 
-                        const simpleStatus = video.status.split(':')[0].toLowerCase().replace(/[^a-z0-9]/gi, '');
-                        statusText.textContent = video.status;
-                        statusText.className = `px-2 inline-flex text-xs leading-5 font-semibold rounded-full status-${simpleStatus}`;
+                            const isWorking = ['Kaynak aranıyor...', 'İndiriliyor'].includes(video.status);
+                            const isDone = video.status === 'Tamamlandı';
 
-                        const isWorking = ['Kaynak aranıyor...', 'İndiriliyor'].includes(video.status);
-                        const isDone = video.status === 'Tamamlandı';
+                            if (isWorking || (isDone && video.progress === 100)) {
+                                progressContainer.style.display = 'block';
+                                const currentProgress = Math.floor(video.progress || 0);
+                                progressBar.style.width = `${currentProgress}%`;
+                                progressText.textContent = `${currentProgress}%`;
+                            } else {
+                                progressContainer.style.display = 'none';
+                            }
 
-                        if (isWorking || (isDone && video.progress === 100)) {
-                            progressContainer.style.display = 'block';
-                            // Math.floor() ile ondalıklı kısmı atarak göster
-                            const currentProgress = Math.floor(video.progress);
-                            progressBar.style.width = `${currentProgress}%`;
-                            progressText.textContent = `${currentProgress}%`;
-                        } else {
-                            progressContainer.style.display = 'none';
+                            // Aksiyon butonlarını güncelle
+                            document.getElementById(`actions-${id}`).innerHTML = createActionsHtml(video);
                         }
+                    }
+
+                    // Kuyruk boşsa mesaj göster
+                    const noVideosRow = document.getElementById('no-videos-row');
+                    if (receivedVideoIds.size === 0 && !noVideosRow) {
+                        videoQueueBody.innerHTML = '<tr id="no-videos-row"><td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">Kuyruk boş.</td></tr>';
+                    } else if (receivedVideoIds.size > 0 && noVideosRow) {
+                        noVideosRow.remove();
                     }
                 })
                 .catch(error => console.error('Error fetching status:', error));
         }
+
         document.addEventListener('DOMContentLoaded', updateUI);
         setInterval(updateUI, 2500);
     </script>
 </body>
 
-</html> 
+</html>
