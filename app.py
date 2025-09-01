@@ -211,6 +211,18 @@ def delete_series(series_id):
 @app.route("/series/start/<int:series_id>", methods=["POST"])
 def start_series_download(series_id):
     success, message = services.start_all_episodes_for_series(series_id)
+
+    # Eğer bölümler başarıyla sıraya eklendiyse...
+    if success:
+        # Otomatik indirme yöneticisi çalışmıyor olsa bile,
+        # kuyruğu bir kez kontrol etmesi için döngüyü manuel olarak tetikleyelim.
+        # Bu, anında bir indirme başlatılmasını sağlar.
+        try:
+            logger.info(f"Kuyruğa ekleme sonrası indirme döngüsü tetikleniyor...")
+            services.run_auto_download_cycle(active_processes)
+        except Exception as e:
+            logger.error(f"İndirme döngüsü tetiklenirken hata: {e}", exc_info=True)
+
     flash(message, "success" if success else "warning")
     return redirect(url_for("index"))
 

@@ -235,10 +235,11 @@ def process_video(item_id, item_type):
             path_string = filename_template.format(
                 series_title=to_ascii_safe(item["series_title"]),
                 season_number=item["season_number"],
+                season_num=item["season_number"],
                 episode_number=item["episode_number"],
+                episode_num=item["episode_number"],  # <-- BU SATIRI EKLEDİK
                 episode_title=to_ascii_safe(item["title"] or ""),
             )
-
             # İşletim sistemine uygun yola dönüştür
             final_path = os.path.join(base_download_folder, *path_string.split("/"))
 
