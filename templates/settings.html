@@ -52,46 +52,55 @@
                             <input type="text" name="downloads_folder" id="downloads_folder"
                                 value="{{ settings.DOWNLOADS_FOLDER }}"
                                 class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                            <p class="mt-2 text-xs text-gray-400">Videoların kaydedileceği klasör yolu. Docker
-                                kullanılıyorsa bu yol konteyner içindedir.</p>
+                            <p class="mt-2 text-xs text-gray-400">Videoların kaydedileceği ana klasör.</p>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                        <label for="filename_template" class="block text-sm font-medium text-gray-300 md:mt-2">Dosya Adı
-                            Şablonu</label>
+                        <label for="filename_template" class="block text-sm font-medium text-gray-300 md:mt-2">Film
+                            Dosya Adı Şablonu</label>
                         <div class="md:col-span-2">
                             <input type="text" name="filename_template" id="filename_template"
                                 value="{{ settings.FILENAME_TEMPLATE }}"
                                 class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                            <p class="mt-2 text-xs text-gray-400">Kullanılabilir değişkenler: <code>{title}</code>,
-                                <code>{year}</code>, <code>{genre}</code>, <code>{imdb_score}</code>,
-                                <code>{director}</code></p>
+                            <p class="mt-2 text-xs text-gray-400">Değişkenler: <code>{title}</code>, <code>{year}</code>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                        <label for="series_filename_template"
+                            class="block text-sm font-medium text-gray-300 md:mt-2">Dizi Dosya Yolu Şablonu</label>
+                        <div class="md:col-span-2">
+                            <input type="text" name="series_filename_template" id="series_filename_template"
+                                value="{{ settings.SERIES_FILENAME_TEMPLATE }}"
+                                class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                            <p class="mt-2 text-xs text-gray-400">Klasör oluşturmak için <code>/</code> kullanın.
+                                Değişkenler: <code>{series_title}</code>, <code>{season_number}</code>,
+                                <code>{episode_number}</code>, <code>{episode_title}</code></p>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                         <label for="concurrent_downloads"
-                            class="block text-sm font-medium text-gray-300 md:mt-2">Eşzamanlı İndirme Sayısı</label>
+                            class="block text-sm font-medium text-gray-300 md:mt-2">Eşzamanlı İndirme</label>
                         <div class="md:col-span-2">
                             <input type="number" name="concurrent_downloads" id="concurrent_downloads"
                                 value="{{ settings.CONCURRENT_DOWNLOADS }}" min="1" max="5"
                                 class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                            <p class="mt-2 text-xs text-gray-400">Otomatik indirme yöneticisinin aynı anda kaç videoyu
-                                indireceği.</p>
+                            <p class="mt-2 text-xs text-gray-400">Aynı anda indirilecek maksimum dosya sayısı.</p>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                        <label for="speed_limit" class="block text-sm font-medium text-gray-300 md:mt-2">İndirme Hız
+                        <label for="speed_limit" class="block text-sm font-medium text-gray-300 md:mt-2">Hız
                             Limiti</label>
                         <div class="md:col-span-2">
                             <input type="text" name="speed_limit" id="speed_limit" value="{{ settings.SPEED_LIMIT }}"
                                 class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
                             <p class="mt-2 text-xs text-gray-400">Boş bırakırsanız limit olmaz. Örnekler:
-                                <code>500K</code> (500 KB/s), <code>2.5M</code> (2.5 MB/s)</p>
+                                <code>500K</code>, <code>2.5M</code></p>
                         </div>
                     </div>
                 </div>
             </div>
- 
+
             <!-- Güvenlik Ayarları -->
             <div class="bg-gray-800 shadow-lg rounded-lg p-6">
                 <h2 class="text-xl font-semibold text-white border-b border-gray-700 pb-3 mb-6">Yönetici Parolasını

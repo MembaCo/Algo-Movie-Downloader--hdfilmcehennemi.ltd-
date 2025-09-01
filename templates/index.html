@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video İndirme Yöneticisi</title>
+    <title>Video İndirme Yöneticisi v2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .status-sırada {
@@ -90,6 +90,11 @@
         .btn-red:hover {
             color: #dc2626;
         }
+
+        .tab-btn.active {
+            border-color: #4f46e5;
+            color: #a5b4fc;
+        }
     </style>
 </head>
 
@@ -122,40 +127,61 @@
         {% endif %}
         {% endwith %}
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+            <!-- Film Ekle -->
             <div class="bg-gray-800 shadow-lg rounded-lg p-6">
-                <h2 class="text-xl font-semibold text-white mb-4">Yeni Video Ekle</h2>
-                <form action="{{ url_for('add_video') }}" method="post" class="flex flex-col sm:flex-row gap-4">
-                    <input type="url" name="url" placeholder="Tek film linki (https://...)"
-                        class="flex-grow shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md"
+                <h2 class="text-xl font-semibold text-white mb-4">Yeni Film Ekle</h2>
+                <form action="{{ url_for('add_movie') }}" method="post" class="flex flex-col sm:flex-row gap-4">
+                    <input type="url" name="url" placeholder="Tek film linki..."
+                        class="flex-grow shadow-sm block w-full sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md"
                         required>
                     <button type="submit"
-                        class="inline-flex justify-center items-center px-6 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">Sıraya
+                        class="inline-flex justify-center items-center px-4 py-2 border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">Sıraya
                         Ekle</button>
                 </form>
             </div>
+            <!-- Dizi Ekle -->
             <div class="bg-gray-800 shadow-lg rounded-lg p-6">
-                <h2 class="text-xl font-semibold text-white mb-4">Toplu Video Ekle (Liste)</h2>
-                <form action="{{ url_for('add_list') }}" method="post" class="flex flex-col sm:flex-row gap-4">
-                    <input type="url" name="list_url" placeholder="Kategori/Arşiv linki (https://...)"
-                        class="flex-grow shadow-sm focus:ring-teal-500 focus:border-teal-500 block w-full sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md"
+                <h2 class="text-xl font-semibold text-white mb-4">Yeni Dizi Ekle</h2>
+                <form action="{{ url_for('add_series') }}" method="post" class="flex flex-col sm:flex-row gap-4">
+                    <input type="url" name="series_url" placeholder="Dizi ana sayfası linki..."
+                        class="flex-grow shadow-sm block w-full sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md"
                         required>
                     <button type="submit"
-                        class="inline-flex justify-center items-center px-6 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-teal-600 hover:bg-teal-700">Toplu
+                        class="inline-flex justify-center items-center px-4 py-2 border-transparent text-base font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700">Diziyi
+                        Ekle</button>
+                </form>
+            </div>
+            <!-- Toplu Ekle -->
+            <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-white mb-4">Toplu Film Ekle</h2>
+                <form action="{{ url_for('add_list') }}" method="post" class="flex flex-col sm:flex-row gap-4">
+                    <input type="url" name="list_url" placeholder="Kategori/Arşiv linki..."
+                        class="flex-grow shadow-sm block w-full sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md"
+                        required>
+                    <button type="submit"
+                        class="inline-flex justify-center items-center px-4 py-2 border-transparent text-base font-medium rounded-md shadow-sm text-white bg-teal-600 hover:bg-teal-700">Toplu
                         Ekle</button>
                 </form>
             </div>
         </div>
 
+        <!-- İndirme Kuyruğu -->
         <div class="bg-gray-800 shadow-lg rounded-lg">
             <div class="px-4 py-5 sm:px-6 border-b border-gray-700 flex justify-between items-center">
-                <h3 class="text-lg leading-6 font-medium text-white">İndirme Kuyruğu</h3>
+                <div class="flex items-center space-x-4">
+                    <button id="tab-movies"
+                        class="tab-btn px-3 py-2 font-medium text-sm rounded-md border-b-2 border-transparent">Filmler</button>
+                    <button id="tab-series"
+                        class="tab-btn px-3 py-2 font-medium text-sm rounded-md border-b-2 border-transparent">Diziler</button>
+                </div>
                 <form action="{{ url_for('toggle_auto_download') }}" method="post">
                     <button type="submit" id="auto-download-btn"
                         class="px-4 py-2 text-sm font-medium rounded-md"></button>
                 </form>
             </div>
-            <div class="overflow-x-auto">
+
+            <div id="content-movies" class="tab-content overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-700">
                     <thead class="bg-gray-700">
                         <tr>
@@ -173,212 +199,253 @@
                                 İşlemler</th>
                         </tr>
                     </thead>
-                    <tbody id="video-queue-body" class="bg-gray-800 divide-y divide-gray-700">
-                        {% for video in videos %}
-                        <tr id="video-row-{{ video.id }}">
-                            <td class="px-6 py-4 whitespace-nowrap align-top">
-                                <span id="status-text-{{ video.id }}"
-                                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full status-{{ video.status.split(':')[0]|lower|replace(' ', '')|replace('ı', 'i') }}">{{
-                                    video.status }}</span>
-                                <div id="progress-container-{{ video.id }}" class="mt-2 w-full progress-bar-container"
-                                    style="display: none;">
-                                    <div id="progress-bar-{{ video.id }}"
-                                        class="progress-bar flex items-center justify-center text-xs font-medium"
-                                        style="width: 0%;"><span id="progress-text-{{ video.id }}">0%</span></div>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 align-top">
-                                <img id="poster-{{ video.id }}"
-                                    src="{{ video.poster_url or 'https://via.placeholder.com/100x150.png?text=Poster+Yok' }}"
-                                    alt="Film Posteri" class="w-20 rounded shadow-lg">
-                            </td>
-                            <td class="px-6 py-4 text-sm text-gray-300 align-top">
-                                <div class="font-bold text-base text-indigo-400">{{ video.title or 'Başlık Bilinmiyor'
-                                    }}</div>
-                                <div class="mt-1"><span class="font-semibold">IMDb:</span> <span
-                                        class="text-yellow-400 font-bold">{{ video.imdb_score }}</span> | <span
-                                        class="font-semibold">Yıl:</span> {{ video.year }} | <span
-                                        class="font-semibold">Tür:</span> {{ video.genre }}</div>
-                                <p class="mt-2 text-xs text-gray-400 max-h-24 overflow-auto">{{ video.description }}</p>
-                                <div class="mt-2 text-xs">
-                                    <p class="text-gray-400"><span class="font-semibold">Yönetmen:</span> {{
-                                        video.director }}</p>
-                                    <p class="text-gray-400 truncate"><span class="font-semibold">Oyuncular:</span> {{
-                                        video.cast }}</p>
-                                </div>
-                                <div class="mt-2 text-xs text-gray-500 truncate" title="{{ video.url }}">{{ video.url }}
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium align-top">
-                                <div id="actions-{{ video.id }}" class="flex items-center space-x-4">
-                                    {% if video.status in ['Kaynak aranıyor...', 'İndiriliyor'] %}
-                                    <form action="{{ url_for('stop_download', video_id=video.id) }}" method="post">
-                                        <button type="submit" class="btn btn-yellow font-semibold">Durdur</button>
-                                    </form>
-                                    {% elif video.status == 'Tamamlandı' %}
-                                    <form action="{{ url_for('start_download', video_id=video.id) }}" method="post">
-                                        <button type="submit" class="btn btn-blue font-semibold">Yeniden İndir</button>
-                                    </form>
-                                    {% if video.filepath %}<form
-                                        action="{{ url_for('delete_file', video_id=video.id) }}" method="post"
-                                        onsubmit="return confirm('Bu dosyayı diskten kalıcı olarak silmek istediğinizden emin misiniz?');">
-                                        <button type="submit" class="btn btn-purple font-semibold">Disk'ten Sil</button>
-                                    </form>{% endif %}
-                                    {% else %}
-                                    <form action="{{ url_for('start_download', video_id=video.id) }}" method="post">
-                                        <button type="submit" class="btn btn-green font-semibold">Başlat</button></form>
-                                    {% endif %}
-                                    <form action="{{ url_for('delete_video', video_id=video.id) }}" method="post"
-                                        onsubmit="return confirm('Bu kaydı silmek istediğinizden emin misiniz?');">
-                                        <button type="submit" class="btn btn-red font-semibold">Sil</button></form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr id="no-videos-row">
-                            <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">Kuyruk boş.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
+                    <tbody id="movie-queue-body" class="bg-gray-800 divide-y divide-gray-700"></tbody>
                 </table>
             </div>
+            <div id="content-series" class="tab-content p-4 space-y-4" style="display: none;"></div>
+
         </div>
         <footer class="text-center text-sm text-gray-500 py-4 mt-4">Sürüm {{ version }}</footer>
     </main>
     <script>
-        // --- YENİ: Akıcı Arayüz Güncelleme Scripti ---
-        function createVideoRow(video) {
-            const statusSimple = (video.status || '').split(':')[0].toLowerCase().replace(/[^a-z0-9]/gi, '');
-            const actionsHtml = createActionsHtml(video);
+        document.addEventListener('DOMContentLoaded', function () {
+            // --- DEĞİŞKENLER VE DURUM YÖNETİMİ ---
+            const tabs = {
+                movies: { btn: document.getElementById('tab-movies'), content: document.getElementById('content-movies') },
+                series: { btn: document.getElementById('tab-series'), content: document.getElementById('content-series') }
+            };
+            const accordionState = new Set(); // Açık olan akordiyonların ID'lerini tutar
 
-            return `
-                <td class="px-6 py-4 whitespace-nowrap align-top">
-                    <span id="status-text-${video.id}" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full status-${statusSimple}">${video.status || ''}</span>
-                    <div id="progress-container-${video.id}" class="mt-2 w-full progress-bar-container" style="display: none;">
-                        <div id="progress-bar-${video.id}" class="progress-bar flex items-center justify-center text-xs font-medium" style="width: 0%;"><span id="progress-text-${video.id}">0%</span></div>
-                    </div>
-                </td>
-                <td class="px-6 py-4 align-top">
-                    <img id="poster-${video.id}" src="${video.poster_url || 'https://via.placeholder.com/100x150.png?text=Poster+Yok'}" alt="Film Posteri" class="w-20 rounded shadow-lg">
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-300 align-top">
-                    <div class="font-bold text-base text-indigo-400">${video.title || 'Başlık Bilinmiyor'}</div>
-                    <div class="mt-1"><span class="font-semibold">IMDb:</span> <span class="text-yellow-400 font-bold">${video.imdb_score || 'N/A'}</span> | <span class="font-semibold">Yıl:</span> ${video.year || 'N/A'} | <span class="font-semibold">Tür:</span> ${video.genre || 'N/A'}</div>
-                    <p class="mt-2 text-xs text-gray-400 max-h-24 overflow-auto">${video.description || ''}</p>
-                    <div class="mt-2 text-xs"><p class="text-gray-400"><span class="font-semibold">Yönetmen:</span> ${video.director || 'N/A'}</p><p class="text-gray-400 truncate"><span class="font-semibold">Oyuncular:</span> ${video.cast || 'N/A'}</p></div>
-                    <div class="mt-2 text-xs text-gray-500 truncate" title="${video.url || ''}">${video.url || ''}</div>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium align-top">
-                    <div id="actions-${video.id}" class="flex items-center space-x-4">${actionsHtml}</div>
-                </td>
-            `;
-        }
-
-        function createActionsHtml(video) {
-            let html = '';
-            const isWorking = ['Kaynak aranıyor...', 'İndiriliyor'].includes(video.status);
-
-            if (isWorking) {
-                html += `<form action="/stop/${video.id}" method="post"><button type="submit" class="btn btn-yellow font-semibold">Durdur</button></form>`;
-            } else if (video.status === 'Tamamlandı') {
-                html += `<form action="/start/${video.id}" method="post"><button type="submit" class="btn btn-blue font-semibold">Yeniden İndir</button></form>`;
-                if (video.filepath) {
-                    html += `<form action="/delete_file/${video.id}" method="post" onsubmit="return confirm('Bu dosyayı diskten kalıcı olarak silmek istediğinizden emin misiniz?');"><button type="submit" class="btn btn-purple font-semibold">Disk'ten Sil</button></form>`;
-                }
-            } else {
-                html += `<form action="/start/${video.id}" method="post"><button type="submit" class="btn btn-green font-semibold">Başlat</button></form>`;
+            // --- SEKMELER (TABS) ---
+            function switchTab(tabName) {
+                Object.values(tabs).forEach(tab => {
+                    tab.btn.classList.remove('active');
+                    tab.content.style.display = 'none';
+                });
+                tabs[tabName].btn.classList.add('active');
+                tabs[tabName].content.style.display = 'block';
+                localStorage.setItem('activeTab', tabName);
             }
-            html += `<form action="/delete/${video.id}" method="post" onsubmit="return confirm('Bu kaydı silmek istediğinizden emin misiniz?');"><button type="submit" class="btn btn-red font-semibold">Sil</button></form>`;
-            return html;
-        }
 
-        function updateUI() {
-            fetch('/status')
-                .then(response => {
-                    if (!response.ok) {
-                        if (response.status === 401) window.location.reload();
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    const videos = data.videos;
-                    const autoDownloadEnabled = data.auto_download_enabled;
-                    const autoDownloadBtn = document.getElementById('auto-download-btn');
-                    const videoQueueBody = document.getElementById('video-queue-body');
+            // --- AKORDİYON ---
+            window.toggleAccordion = function (elementId) {
+                const element = document.getElementById(elementId);
+                if (!element) return;
+                element.classList.toggle('hidden');
 
-                    // Otomatik indirme butonunu güncelle
-                    if (autoDownloadEnabled) {
-                        autoDownloadBtn.textContent = 'Otomatik İndirmeyi Durdur';
-                        autoDownloadBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700';
-                    } else {
-                        autoDownloadBtn.textContent = 'Otomatik İndirmeyi Başlat';
-                        autoDownloadBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700';
-                    }
+                if (element.classList.contains('hidden')) {
+                    accordionState.delete(elementId);
+                } else {
+                    accordionState.add(elementId);
+                }
 
-                    const receivedVideoIds = new Set(Object.keys(videos).map(id => parseInt(id)));
-                    const displayedVideoRows = videoQueueBody.querySelectorAll('tr[id^="video-row-"]');
-                    const displayedVideoIds = new Set(Array.from(displayedVideoRows).map(row => parseInt(row.id.replace('video-row-', ''))));
+                const arrow = document.getElementById(elementId.replace('content', 'arrow'));
+                if (arrow) {
+                    arrow.classList.toggle('rotate-180', !element.classList.contains('hidden'));
+                }
+            };
 
-                    // Silinmiş videoları UI'dan kaldır
-                    displayedVideoRows.forEach(row => {
-                        const videoId = parseInt(row.id.replace('video-row-', ''));
-                        if (!receivedVideoIds.has(videoId)) {
-                            row.remove();
-                        }
+            // --- ANA GÜNCELLEME MANTIĞI ---
+            function updateUI() {
+                fetch('/status')
+                    .then(response => response.ok ? response.json() : Promise.reject(response))
+                    .then(data => {
+                        updateMovies(data.movies);
+                        updateSeries(data.series);
+                        updateAutoDownloadButton(data.auto_download_enabled);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching status:', error);
+                        if (error.status === 401) window.location.reload();
                     });
+            }
 
-                    // Yeni ve mevcut videoları güncelle/ekle
-                    for (const id in videos) {
-                        const video = videos[id];
-                        let row = document.getElementById(`video-row-${id}`);
+            // --- FİLM GÜNCELLEME ---
+            function updateMovies(movies) {
+                const movieQueueBody = document.getElementById('movie-queue-body');
+                const movieData = Object.values(movies);
+                if (movieData.length === 0) {
+                    movieQueueBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">Film kuyruğu boş.</td></tr>';
+                    return;
+                }
+                movieQueueBody.innerHTML = movieData.map(movie => `<tr id="movie-row-${movie.id}">${createMovieRow(movie)}</tr>`).join('');
+                movieData.forEach(movie => {
+                    updateProgress(`movie-${movie.id}`, movie.status, movie.progress);
+                });
+            }
 
-                        if (!row) { // Video UI'da yoksa, yeni satır oluştur
-                            row = document.createElement('tr');
-                            row.id = `video-row-${id}`;
-                            row.innerHTML = createVideoRow(video);
-                            videoQueueBody.appendChild(row);
-                        } else { // Video UI'da varsa, içeriğini güncelle
-                            // Durum ve ilerleme
-                            const statusText = document.getElementById(`status-text-${id}`);
-                            const progressContainer = document.getElementById(`progress-container-${id}`);
-                            const progressBar = document.getElementById(`progress-bar-${id}`);
-                            const progressText = document.getElementById(`progress-text-${id}`);
+            // --- DİZİ GÜNCELLEME (AKILLI) ---
+            function updateSeries(seriesList) {
+                const seriesContainer = document.getElementById('content-series');
+                const existingSeriesIds = new Set([...seriesContainer.querySelectorAll('[id^="series-block-"]')].map(el => parseInt(el.id.replace('series-block-', ''))));
+                const incomingSeriesIds = new Set(seriesList.map(s => s.id));
 
-                            const simpleStatus = (video.status || '').split(':')[0].toLowerCase().replace(/[^a-z0-9]/gi, '');
-                            statusText.textContent = video.status;
-                            statusText.className = `px-2 inline-flex text-xs leading-5 font-semibold rounded-full status-${simpleStatus}`;
+                existingSeriesIds.forEach(id => {
+                    if (!incomingSeriesIds.has(id)) {
+                        document.getElementById(`series-block-${id}`)?.remove();
+                    }
+                });
 
-                            const isWorking = ['Kaynak aranıyor...', 'İndiriliyor'].includes(video.status);
-                            const isDone = video.status === 'Tamamlandı';
-
-                            if (isWorking || (isDone && video.progress === 100)) {
-                                progressContainer.style.display = 'block';
-                                const currentProgress = Math.floor(video.progress || 0);
-                                progressBar.style.width = `${currentProgress}%`;
-                                progressText.textContent = `${currentProgress}%`;
-                            } else {
-                                progressContainer.style.display = 'none';
+                seriesList.forEach(series => {
+                    let seriesBlock = document.getElementById(`series-block-${series.id}`);
+                    if (!seriesBlock) {
+                        const newSeriesHtml = createSeriesAccordion(series);
+                        seriesContainer.insertAdjacentHTML('beforeend', newSeriesHtml);
+                    } else {
+                        series.seasons.forEach(season => {
+                            const episodeListBody = document.getElementById(`episode-list-${season.id}`);
+                            if (episodeListBody) {
+                                episodeListBody.innerHTML = season.episodes.map(ep => createEpisodeRow(ep)).join('');
+                                season.episodes.forEach(ep => updateProgress(`episode-${ep.id}`, ep.status, ep.progress));
                             }
-
-                            // Aksiyon butonlarını güncelle
-                            document.getElementById(`actions-${id}`).innerHTML = createActionsHtml(video);
-                        }
+                        });
                     }
+                });
 
-                    // Kuyruk boşsa mesaj göster
-                    const noVideosRow = document.getElementById('no-videos-row');
-                    if (receivedVideoIds.size === 0 && !noVideosRow) {
-                        videoQueueBody.innerHTML = '<tr id="no-videos-row"><td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">Kuyruk boş.</td></tr>';
-                    } else if (receivedVideoIds.size > 0 && noVideosRow) {
-                        noVideosRow.remove();
+                if (seriesList.length === 0 && seriesContainer.children.length === 0) {
+                    seriesContainer.innerHTML = '<div class="p-4 text-center text-sm text-gray-500">Henüz dizi eklenmemiş.</div>';
+                }
+            }
+
+            // --- YARDIMCI FONKSİYONLAR ---
+            function updateAutoDownloadButton(isEnabled) {
+                const autoDownloadBtn = document.getElementById('auto-download-btn');
+                if (isEnabled) {
+                    autoDownloadBtn.textContent = 'Otomatik İndirmeyi Durdur';
+                    autoDownloadBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700';
+                } else {
+                    autoDownloadBtn.textContent = 'Otomatik İndirmeyi Başlat';
+                    autoDownloadBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700';
+                }
+            }
+
+            function updateProgress(idPrefix, status, progressValue) {
+                const progressContainer = document.getElementById(`progress-container-${idPrefix}`);
+                if (!progressContainer) return;
+
+                const isWorking = ['Kaynak aranıyor...', 'İndiriliyor'].includes(status);
+                const isDone = status === 'Tamamlandı';
+
+                if (isWorking || (isDone && progressValue === 100)) {
+                    progressContainer.style.display = 'block';
+                    const progress = Math.floor(progressValue || 0);
+                    document.getElementById(`progress-bar-${idPrefix}`).style.width = `${progress}%`;
+                    document.getElementById(`progress-text-${idPrefix}`).textContent = `${progress}%`;
+                } else {
+                    progressContainer.style.display = 'none';
+                }
+            }
+
+            // --- HTML OLUŞTURMA FONKSİYONLARI (DETAY) ---
+            function createMovieRow(movie) {
+                const statusSimple = (movie.status || '').split(':')[0].toLowerCase().replace(/[^a-z0-9]/gi, '');
+                return `
+                    <td class="px-6 py-4 whitespace-nowrap align-top">
+                        <span id="status-text-movie-${movie.id}" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full status-${statusSimple}">${movie.status || ''}</span>
+                        <div id="progress-container-movie-${movie.id}" class="mt-2 w-full progress-bar-container" style="display: none;">
+                            <div id="progress-bar-movie-${movie.id}" class="progress-bar flex items-center justify-center text-xs font-medium" style="width: 0%;"><span id="progress-text-movie-${movie.id}">0%</span></div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 align-top"><img src="${movie.poster_url || 'https://placehold.co/100x150/1f2937/9ca3af?text=Poster+Yok'}" alt="Film Posteri" class="w-20 rounded shadow-lg"></td>
+                    <td class="px-6 py-4 text-sm text-gray-300 align-top">
+                        <div class="font-bold text-base text-indigo-400">${movie.title || 'Başlık Bilinmiyor'}</div>
+                        <div class="mt-1"><span class="font-semibold">IMDb:</span> <span class="text-yellow-400 font-bold">${movie.imdb_score || 'N/A'}</span> | <span class="font-semibold">Yıl:</span> ${movie.year || 'N/A'}</div>
+                        <p class="mt-2 text-xs text-gray-400 max-h-24 overflow-auto">${movie.description || ''}</p>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium align-top"><div id="actions-movie-${movie.id}" class="flex items-center space-x-4">${createActionsHtml(movie, 'movie')}</div></td>
+                `;
+            }
+
+            function createSeriesAccordion(series) {
+                let seasonsHtml = series.seasons.map(season => createSeasonAccordion(series.id, season)).join('');
+                if (series.seasons.length === 0) seasonsHtml = `<div class="p-4 text-sm text-gray-400">Bu dizi için bölüm bulunamadı.</div>`;
+                const isSeriesOpen = accordionState.has(`series-content-${series.id}`);
+                return `
+                    <div class="bg-gray-700 rounded-lg" id="series-block-${series.id}">
+                        <div class="flex items-center p-4">
+                            <div class="flex-grow flex items-center cursor-pointer" onclick="toggleAccordion('series-content-${series.id}')">
+                                <img src="${series.poster_url || 'https://placehold.co/100x150/1f2937/9ca3af?text=Poster+Yok'}" alt="Dizi Posteri" class="w-16 h-24 object-cover rounded shadow-lg mr-4">
+                                <div class="flex-grow">
+                                    <h3 class="text-lg font-bold text-purple-400">${series.title}</h3>
+                                    <p class="text-xs text-gray-400 max-h-16 overflow-auto">${series.description}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4 ml-4 mr-2">
+                                <form action="/series/start/${series.id}" method="post">
+                                    <button type="submit" class="btn btn-green font-semibold">Tümünü İndir</button>
+                                </form>
+                                <form action="/series/delete/${series.id}" method="post" onsubmit="return confirm('Bu diziyi ve tüm bölümlerini kalıcı olarak silmek istediğinizden emin misiniz?');">
+                                    <button type="submit" class="btn btn-red font-semibold">Sil</button>
+                                </form>
+                            </div>
+                            <div class="cursor-pointer p-2" onclick="toggleAccordion('series-content-${series.id}')">
+                                <svg class="w-6 h-6 transform transition-transform ${isSeriesOpen ? 'rotate-180' : ''}" id="series-arrow-${series.id}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </div>
+                        </div>
+                        <div id="series-content-${series.id}" class="${isSeriesOpen ? '' : 'hidden'} p-2 sm:p-4 border-t border-gray-600 space-y-2">${seasonsHtml}</div>
+                    </div>
+                `;
+            }
+
+            function createSeasonAccordion(seriesId, season) {
+                const episodesHtml = season.episodes.map(ep => createEpisodeRow(ep)).join('');
+                const isSeasonOpen = accordionState.has(`season-content-${season.id}`);
+                return `
+                    <div class="bg-gray-800 rounded" id="season-block-${season.id}">
+                        <div class="px-4 py-2 cursor-pointer font-semibold flex justify-between items-center" onclick="toggleAccordion('season-content-${season.id}')">
+                            <span>Sezon ${season.season_number}</span>
+                            <svg class="w-5 h-5 transform transition-transform ${isSeasonOpen ? 'rotate-180' : ''}" id="season-arrow-${season.id}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                        <div id="season-content-${season.id}" class="${isSeasonOpen ? '' : 'hidden'}"><table class="min-w-full"><tbody id="episode-list-${season.id}">${episodesHtml}</tbody></table></div>
+                    </div>
+                `;
+            }
+
+            function createEpisodeRow(episode) {
+                const statusSimple = (episode.status || '').split(':')[0].toLowerCase().replace(/[^a-z0-9]/gi, '');
+                return `
+                    <tr id="episode-row-${episode.id}" class="border-t border-gray-700">
+                        <td class="px-3 py-2 text-sm w-1/12">${episode.episode_number}</td>
+                        <td class="px-3 py-2 text-sm w-5/12">${episode.title}</td>
+                        <td class="px-3 py-2 text-sm w-3/12">
+                            <span id="status-text-episode-${episode.id}" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full status-${statusSimple}">${episode.status}</span>
+                            <div id="progress-container-episode-${episode.id}" class="mt-1 w-full progress-bar-container" style="display: none;">
+                                <div id="progress-bar-episode-${episode.id}" class="progress-bar text-xs" style="width: 0%;"><span id="progress-text-episode-${episode.id}">0%</span></div>
+                            </div>
+                        </td>
+                        <td class="px-3 py-2 text-sm w-3/12"><div id="actions-episode-${episode.id}" class="flex items-center space-x-3">${createActionsHtml(episode, 'episode')}</div></td>
+                    </tr>
+                `;
+            }
+
+            function createActionsHtml(item, type) {
+                let html = '';
+                const id = item.id;
+                const status = item.status;
+                const isWorking = ['Kaynak aranıyor...', 'İndiriliyor'].includes(status);
+
+                if (isWorking) {
+                    html += `<form action="/${type}/stop/${id}" method="post"><button type="submit" class="btn btn-yellow font-semibold">Durdur</button></form>`;
+                } else if (status === 'Tamamlandı') {
+                    html += `<form action="/${type}/start/${id}" method="post"><button type="submit" class="btn btn-blue font-semibold">Yeniden</button></form>`;
+                    if (item.filepath) {
+                        html += `<form action="/${type}/delete_file/${id}" method="post" onsubmit="return confirm('Bu dosyayı diskten kalıcı olarak silmek istediğinizden emin misiniz?');"><button type="submit" class="btn btn-purple font-semibold">Disk'ten Sil</button></form>`;
                     }
-                })
-                .catch(error => console.error('Error fetching status:', error));
-        }
+                } else {
+                    html += `<form action="/${type}/start/${id}" method="post"><button type="submit" class="btn btn-green font-semibold">Başlat</button></form>`;
+                }
+                html += `<form action="/${type}/delete/${id}" method="post" onsubmit="return confirm('Bu kaydı silmek istediğinizden emin misiniz?');"><button type="submit" class="btn btn-red font-semibold">Sil</button></form>`;
+                return html;
+            }
 
-        document.addEventListener('DOMContentLoaded', updateUI);
-        setInterval(updateUI, 2500);
+            // --- BAŞLANGIÇ ---
+            tabs.movies.btn.addEventListener('click', () => switchTab('movies'));
+            tabs.series.btn.addEventListener('click', () => switchTab('series'));
+            const activeTab = localStorage.getItem('activeTab') || 'movies';
+            switchTab(activeTab);
+            setInterval(updateUI, 3000);
+            updateUI();
+        });
     </script>
 </body>
 

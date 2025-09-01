@@ -18,8 +18,11 @@ from worker import process_video
 logger = logging.getLogger(__name__)
 
 
-def _scrape_from_html(soup):
-    logger.info("Yedek HTML kazıma yöntemi kullanılıyor.")
+# --- FİLM İŞLEMLERİ ---
+
+
+def _scrape_movie_from_html(soup):
+    logger.info("Film için yedek HTML kazıma yöntemi kullanılıyor.")
     try:
         metadata = {
             "title": "Başlık Bulunamadı",
@@ -75,7 +78,7 @@ def _scrape_from_html(soup):
         return None
 
 
-def scrape_metadata(url):
+def scrape_movie_metadata(url):
     try:
         headers = {"User-Agent": config.USER_AGENT}
         response = requests.get(url, headers=headers, timeout=20)
@@ -83,34 +86,19 @@ def scrape_metadata(url):
         soup = BeautifulSoup(response.text, "html.parser")
         json_ld_script = soup.find("script", type="application/ld+json")
         if json_ld_script:
-            logger.info(f"JSON-LD verisi bulundu. URL: {url}")
             data = json.loads(json_ld_script.string)
             movie_data = None
-
-            def find_movie_in_json(item):
-                if not isinstance(item, dict):
-                    return None
-                item_type = item.get("@type")
+            items_to_search = (
+                data.get("@graph", [])
+                if isinstance(data, dict)
+                else (data if isinstance(data, list) else [data])
+            )
+            for item in items_to_search:
+                item_type = item.get("@type", "")
                 if (isinstance(item_type, str) and item_type == "Movie") or (
                     isinstance(item_type, list) and "Movie" in item_type
                 ):
-                    return item
-                return None
-
-            items_to_search = []
-            if (
-                isinstance(data, dict)
-                and "@graph" in data
-                and isinstance(data.get("@graph"), list)
-            ):
-                items_to_search = data["@graph"]
-            elif isinstance(data, list):
-                items_to_search = data
-            elif isinstance(data, dict):
-                items_to_search = [data]
-            for item in items_to_search:
-                movie_data = find_movie_in_json(item)
-                if movie_data:
+                    movie_data = item
                     break
             if movie_data:
                 rating = movie_data.get("aggregateRating", {})
@@ -144,9 +132,9 @@ def scrape_metadata(url):
                 logger.info("JSON-LD ile film verisi başarıyla çekildi.")
                 return metadata
         logger.warning(
-            f"JSON-LD ile geçerli veri bulunamadı, HTML kazıma yöntemine geçiliyor. URL: {url}"
+            f"JSON-LD ile film verisi bulunamadı, HTML kazımaya geçiliyor. URL: {url}"
         )
-        return _scrape_from_html(soup)
+        return _scrape_movie_from_html(soup)
     except requests.exceptions.RequestException:
         logger.error(f"Meta veri çekilirken ağ hatası oluştu: {url}", exc_info=True)
         return None
@@ -157,21 +145,15 @@ def scrape_metadata(url):
         return None
 
 
-def add_video_to_queue(url):
+def add_movie_to_queue(url):
     db = get_db()
-    if db.execute("SELECT id FROM videos WHERE url = ?", (url,)).fetchone():
-        logger.warning(f"Video zaten kuyrukta mevcut, atlanıyor: {url}")
-        return False, "Bu video zaten kuyrukta mevcut."
-    logger.info(f"Yeni video için meta veri çekiliyor: {url}")
-    metadata = scrape_metadata(url)
+    if db.execute("SELECT id FROM movies WHERE url = ?", (url,)).fetchone():
+        return False, "Bu film zaten kuyrukta mevcut."
+    metadata = scrape_movie_metadata(url)
     if not metadata:
-        logger.error(f"Meta veri çekilemedi, video eklenemedi: {url}")
-        return (
-            False,
-            "Film bilgileri çekilemedi. Linki kontrol edin veya site yapısı değişmiş olabilir.",
-        )
+        return False, "Film bilgileri çekilemedi."
     db.execute(
-        "INSERT INTO videos (url, status, title, year, genre, description, imdb_score, director, cast, poster_url, source_site) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO movies (url, status, title, year, genre, description, imdb_score, director, cast, poster_url, source_site) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             url,
             "Sırada",
@@ -187,7 +169,6 @@ def add_video_to_queue(url):
         ),
     )
     db.commit()
-    logger.info(f"'{metadata['title']}' adlı film sıraya eklendi.")
     return True, f'"{metadata["title"]}" başarıyla sıraya eklendi.'
 
 
@@ -219,7 +200,7 @@ def scrape_movie_links_from_list_page(list_url):
         return [], error_message
 
 
-def add_videos_from_list_page_async(app, list_url):
+def add_movies_from_list_page_async(app, list_url):
     with app.app_context():
         movie_links, error = scrape_movie_links_from_list_page(list_url)
         if error:
@@ -228,7 +209,7 @@ def add_videos_from_list_page_async(app, list_url):
         added, skipped, failed = 0, 0, 0
         for link in movie_links:
             try:
-                success, message = add_video_to_queue(link)
+                success, message = add_movie_to_queue(link)
                 if success:
                     added += 1
                 elif "zaten kuyrukta mevcut" in message.lower():
@@ -246,37 +227,182 @@ def add_videos_from_list_page_async(app, list_url):
         )
 
 
-def start_download_for_video(video_id, active_processes):
+# --- DİZİ İŞLEMLERİ ---
+
+
+def scrape_series_data(series_url):
+    try:
+        logger.info(f"Dizi verisi çekiliyor: {series_url}")
+        headers = {"User-Agent": config.USER_AGENT}
+        response = requests.get(series_url, headers=headers, timeout=20)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        series_info = {
+            "title": soup.select_one("div.data > h1").text.strip(),
+            "poster_url": soup.select_one("div.poster > img").get("src"),
+            "description": soup.select_one("div#info div.wp-content").text.strip(),
+            "source_url": series_url,
+            "seasons": [],
+        }
+
+        season_blocks = soup.select("div#seasons > div.se-c")
+        if not season_blocks:
+            logger.warning(f"Dizi için sezon bilgisi bulunamadı. URL: {series_url}")
+            return None
+
+        for block in season_blocks:
+            season_number_text = block.select_one(".se-q .se-t").text.strip()
+            try:
+                season_number = int(season_number_text)
+            except (ValueError, TypeError):
+                logger.warning(f"Geçersiz sezon numarası: {season_number_text}")
+                continue
+
+            season_data = {"season_number": season_number, "episodes": []}
+            episode_list_items = block.select("ul.episodios > li")
+            for item in episode_list_items:
+                episode_title_element = item.select_one("h2.episodiotitle > a")
+                if not episode_title_element:
+                    continue
+
+                episode_url = episode_title_element.get("href")
+                episode_title = episode_title_element.contents[0].strip()
+                numerando = item.select_one("div.numerando").text.split("-")
+                episode_number = int(numerando[1].strip())
+
+                season_data["episodes"].append(
+                    {
+                        "episode_number": episode_number,
+                        "title": episode_title,
+                        "url": episode_url,
+                    }
+                )
+            series_info["seasons"].append(season_data)
+
+        logger.info(
+            f"'{series_info['title']}' dizisi için {len(series_info['seasons'])} sezon bulundu."
+        )
+        return series_info
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Dizi sayfası çekilirken ağ hatası: {e}", exc_info=True)
+        return None
+    except Exception as e:
+        logger.error(f"Dizi sayfası ayrıştırılırken hata: {e}", exc_info=True)
+        return None
+
+
+def add_series_to_queue(series_url):
     db = get_db()
-    video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
-    if not video:
-        return False, "Video bulunamadı."
-    if video["status"] in ["Kaynak aranıyor...", "İndiriliyor"]:
+    series_data = scrape_series_data(series_url)
+    if not series_data:
+        return (
+            False,
+            "Dizi bilgileri çekilemedi. Linki kontrol edin veya site yapısı değişmiş olabilir.",
+        )
+
+    cursor = db.cursor()
+    cursor.execute(
+        "SELECT id FROM series WHERE source_url = ?", (series_data["source_url"],)
+    )
+    series_row = cursor.fetchone()
+
+    if not series_row:
+        cursor.execute(
+            "INSERT INTO series (title, poster_url, description, source_url) VALUES (?, ?, ?, ?)",
+            (
+                series_data["title"],
+                series_data["poster_url"],
+                series_data["description"],
+                series_data["source_url"],
+            ),
+        )
+        series_id = cursor.lastrowid
+    else:
+        series_id = series_row["id"]
+
+    added_count = 0
+    for season in series_data["seasons"]:
+        cursor.execute(
+            "SELECT id FROM seasons WHERE series_id = ? AND season_number = ?",
+            (series_id, season["season_number"]),
+        )
+        season_row = cursor.fetchone()
+
+        if not season_row:
+            cursor.execute(
+                "INSERT INTO seasons (series_id, season_number) VALUES (?, ?)",
+                (series_id, season["season_number"]),
+            )
+            season_id = cursor.lastrowid
+        else:
+            season_id = season_row["id"]
+
+        for episode in season["episodes"]:
+            res = cursor.execute(
+                "INSERT OR IGNORE INTO episodes (season_id, episode_number, title, url) VALUES (?, ?, ?, ?)",
+                (
+                    season_id,
+                    episode["episode_number"],
+                    episode["title"],
+                    episode["url"],
+                ),
+            )
+            if res.rowcount > 0:
+                added_count += 1
+
+    db.commit()
+    return (
+        True,
+        f'"{series_data["title"]}" dizisi için {added_count} yeni bölüm sıraya eklendi.',
+    )
+
+
+def add_series_to_queue_async(app, series_url):
+    with app.app_context():
+        success, message = add_series_to_queue(series_url)
+        if not success:
+            logger.error(f"Dizi ekleme hatası ({series_url}): {message}")
+        else:
+            logger.info(message)
+
+
+# --- ORTAK İŞLEMLER ---
+
+
+def start_download(item_id, item_type, active_processes):
+    db = get_db()
+    table = "movies" if item_type == "movie" else "episodes"
+
+    item = db.execute(f"SELECT * FROM {table} WHERE id = ?", (item_id,)).fetchone()
+    if not item:
+        return False, "Kayıt bulunamadı."
+    if item["status"] in ["Kaynak aranıyor...", "İndiriliyor"]:
         return False, "Bu indirme zaten devam ediyor."
 
-    p = Process(target=process_video, args=(video_id,))
+    p = Process(target=process_video, args=(item_id, item_type))
     p.start()
     pid = p.pid
     active_processes[pid] = p
 
     db.execute(
-        "UPDATE videos SET status = ?, pid = ?, progress = 0, filepath = NULL WHERE id = ?",
-        ("Kaynak aranıyor...", pid, video_id),
+        f"UPDATE {table} SET status = ?, pid = ?, progress = 0, filepath = NULL WHERE id = ?",
+        ("Kaynak aranıyor...", pid, item_id),
     )
     db.commit()
-    logger.info(
-        f"ID {video_id} ('{video['title']}') için indirme başlatıldı. PID: {pid}"
-    )
-    return True, f'"{video["title"]}" için indirme başlatıldı.'
+    title = item["title"] if item_type == "movie" else f"Bölüm {item['episode_number']}"
+    logger.info(f"ID {item_id} ('{title}') için indirme başlatıldı. PID: {pid}")
+    return True, f'"{title}" için indirme başlatıldı.'
 
 
-def stop_download_for_video(video_id):
+def stop_download(item_id, item_type):
     db = get_db()
-    video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
-    if not (video and video["pid"]):
+    table = "movies" if item_type == "movie" else "episodes"
+    item = db.execute(f"SELECT * FROM {table} WHERE id = ?", (item_id,)).fetchone()
+    if not (item and item["pid"]):
         return False, "Durdurulacak bir işlem bulunamadı."
-    pid = video["pid"]
-    logger.info(f"ID {video_id} ('{video['title']}') için durdurma isteği. PID: {pid}")
+    pid = item["pid"]
+
     try:
         if sys.platform != "win32":
             os.killpg(os.getpgid(pid), signal.SIGTERM)
@@ -289,44 +415,113 @@ def stop_download_for_video(video_id):
         message = "İndirme durdurma isteği gönderildi."
     except (ProcessLookupError, subprocess.CalledProcessError):
         message = "İşlem zaten sonlanmış."
-        logger.warning(f"Durdurulmaya çalışılan işlem (PID: {pid}) bulunamadı.")
     except OSError as e:
         message = f"İşlem durdurulurken bir hata oluştu: {e}"
-        logger.error(f"İşlem durdurulurken hata oluştu (PID: {pid})", exc_info=True)
+
     db.execute(
-        "UPDATE videos SET status = 'Duraklatıldı', pid = NULL WHERE id = ?",
-        (video_id,),
+        f"UPDATE {table} SET status = 'Duraklatıldı', pid = NULL WHERE id = ?",
+        (item_id,),
     )
     db.commit()
     return True, message
 
 
-def delete_video_record(video_id, active_processes):
+def delete_record(item_id, item_type, active_processes):
     db = get_db()
-    video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
-    if video and video["pid"]:
-        pid = video["pid"]
-        stop_download_for_video(video_id)
+    table = "movies" if item_type == "movie" else "episodes"
+    item = db.execute(f"SELECT * FROM {table} WHERE id = ?", (item_id,)).fetchone()
+
+    if item and item["pid"]:
+        pid = item["pid"]
+        stop_download(item_id, item_type)
         if pid in active_processes:
             del active_processes[pid]
 
-    title_to_log = video["title"] if video else "Bilinmeyen"
-    db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
+    db.execute(f"DELETE FROM {table} WHERE id = ?", (item_id,))
     db.commit()
-    logger.info(f"ID {video_id} ('{title_to_log}') veritabanından silindi.")
-    return True, "Video kaydı başarıyla silindi."
+    return True, "Kayıt başarıyla silindi."
 
 
-def delete_video_file(video_id):
+def delete_series_record(series_id, active_processes):
+    """Bir diziyi, tüm sezonlarını ve bölümlerini veritabanından siler."""
     db = get_db()
-    video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
-    if not video:
-        return False, "Video kaydı bulunamadı."
-    filepath = video["filepath"]
+
+    episodes_to_delete = db.execute(
+        """
+        SELECT e.id, e.pid FROM episodes e
+        JOIN seasons s ON e.season_id = s.id
+        WHERE s.series_id = ?
+    """,
+        (series_id,),
+    ).fetchall()
+
+    for episode in episodes_to_delete:
+        if episode["pid"]:
+            pid = episode["pid"]
+            stop_download(episode["id"], "episode")
+            if pid in active_processes:
+                del active_processes[pid]
+
+    series = db.execute(
+        "SELECT title FROM series WHERE id = ?", (series_id,)
+    ).fetchone()
+    if series:
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM series WHERE id = ?", (series_id,))
+        db.commit()
+        logger.info(f"'{series['title']}' dizisi ve tüm bölümleri başarıyla silindi.")
+        return True, f"'{series['title']}' dizisi başarıyla silindi."
+    else:
+        return False, "Silinecek dizi bulunamadı."
+
+
+def start_all_episodes_for_series(series_id):
+    """Bir diziye ait indirilebilir durumdaki tüm bölümleri 'Sırada' olarak işaretler."""
+    db = get_db()
+
+    episodes_to_queue = db.execute(
+        """
+        SELECT e.id FROM episodes e
+        JOIN seasons s ON e.season_id = s.id
+        WHERE s.series_id = ? AND e.status NOT IN ('Tamamlandı', 'İndiriliyor', 'Kaynak aranıyor...')
+    """,
+        (series_id,),
+    ).fetchall()
+
+    if not episodes_to_queue:
+        return False, "Sıraya eklenecek yeni bölüm bulunamadı."
+
+    count = 0
+    for episode in episodes_to_queue:
+        db.execute(
+            "UPDATE episodes SET status = 'Sırada' WHERE id = ?", (episode["id"],)
+        )
+        count += 1
+
+    db.commit()
+
+    series_title = db.execute(
+        "SELECT title FROM series WHERE id = ?", (series_id,)
+    ).fetchone()["title"]
+
+    logger.info(f"'{series_title}' dizisi için {count} bölüm indirme sırasına alındı.")
+    return True, f"'{series_title}' dizisi için {count} bölüm indirme sırasına alındı."
+
+
+def delete_item_file(item_id, item_type):
+    """Bir film veya bölüm dosyasını diskten siler."""
+    db = get_db()
+    table = "movies" if item_type == "movie" else "episodes"
+
+    item = db.execute(f"SELECT * FROM {table} WHERE id = ?", (item_id,)).fetchone()
+    if not item:
+        return False, "Kayıt bulunamadı."
+
+    filepath = item["filepath"]
     if filepath and os.path.exists(filepath):
         try:
             os.remove(filepath)
-            db.execute("UPDATE videos SET filepath = NULL WHERE id = ?", (video_id,))
+            db.execute(f"UPDATE {table} SET filepath = NULL WHERE id = ?", (item_id,))
             db.commit()
             logger.info(f"Dosya diskten silindi: {filepath}")
             return True, f'"{os.path.basename(filepath)}" diskten başarıyla silindi.'
@@ -334,23 +529,14 @@ def delete_video_file(video_id):
             logger.error(f"Dosya silinemedi: {filepath}", exc_info=True)
             return False, "Dosya silinirken bir hata oluştu."
     else:
-        db.execute("UPDATE videos SET filepath = NULL WHERE id = ?", (video_id,))
+        db.execute(f"UPDATE {table} SET filepath = NULL WHERE id = ?", (item_id,))
         db.commit()
         return False, "Silinecek dosya bulunamadı veya zaten silinmiş."
 
 
-def get_all_videos_status():
-    """Tüm videoların durum bilgilerini API için döndürür."""
-    db = get_db()
-    # *** DÜZELTME: Sorgunun sonundaki hatalı virgül kaldırıldı. ***
-    videos = db.execute(
-        "SELECT id, status, progress, filepath, poster_url, title, year, genre, description, imdb_score, director, [cast], url FROM videos ORDER BY created_at DESC"
-    ).fetchall()
-    return {v["id"]: dict(v) for v in videos}
-
-
+# --- OTOMATİK İNDİRME YÖNETİCİSİ ---
 def run_auto_download_cycle(active_processes):
-    """Otomatik indirme yöneticisinin bir döngüsünü çalıştırır."""
+    """Sıradaki filmleri ve bölümleri otomatik olarak indirmeye başlar."""
     db = get_db()
     try:
         concurrent_limit = int(get_setting("CONCURRENT_DOWNLOADS", db))
@@ -365,14 +551,57 @@ def run_auto_download_cycle(active_processes):
                 f"Otomatik yönetici: Tamamlanmış proses (PID: {pid}) temizlendi."
             )
 
-    active_count = len(active_processes)
-    if active_count < concurrent_limit:
-        next_video = db.execute(
-            "SELECT id FROM videos WHERE status = 'Sırada' ORDER BY created_at ASC"
-        ).fetchone()
-        if next_video:
-            video_id = next_video["id"]
-            logger.info(
-                f"[Auto-Download] Sırada bekleyen video bulundu (ID: {video_id}). İndirme başlatılıyor."
-            )
-            start_download_for_video(video_id, active_processes)
+    # Mevcut indirme slotlarını doldurana kadar döngüye gir
+    while len(active_processes) < concurrent_limit:
+        next_item = db.execute("""
+            SELECT id, 'movie' as type, created_at FROM movies WHERE status = 'Sırada'
+            UNION ALL
+            SELECT id, 'episode' as type, created_at FROM episodes WHERE status = 'Sırada'
+            ORDER BY created_at ASC
+            LIMIT 1
+        """).fetchone()
+
+        if not next_item:
+            break  # Sırada başka öğe yoksa döngüden çık
+
+        item_id = next_item["id"]
+        item_type = next_item["type"]
+        logger.info(
+            f"[Auto-Download] Sırada bekleyen bulundu ({item_type} ID: {item_id}). İndirme başlatılıyor."
+        )
+        start_download(item_id, item_type, active_processes)
+
+
+# --- API İÇİN VERİ ÇEKME FONKSİYONLARI ---
+
+
+def get_all_movies_status():
+    db = get_db()
+    movies = db.execute("SELECT * FROM movies ORDER BY created_at DESC").fetchall()
+    return {m["id"]: dict(m) for m in movies}
+
+
+def get_all_series_status():
+    db = get_db()
+    series_list = db.execute("SELECT * FROM series ORDER BY title ASC").fetchall()
+
+    series_data = []
+    for s in series_list:
+        series_dict = dict(s)
+        seasons = db.execute(
+            "SELECT * FROM seasons WHERE series_id = ? ORDER BY season_number ASC",
+            (s["id"],),
+        ).fetchall()
+
+        series_dict["seasons"] = []
+        for season in seasons:
+            season_dict = dict(season)
+            episodes = db.execute(
+                "SELECT * FROM episodes WHERE season_id = ? ORDER BY episode_number ASC",
+                (season["id"],),
+            ).fetchall()
+            season_dict["episodes"] = [dict(ep) for ep in episodes]
+            series_dict["seasons"].append(season_dict)
+        series_data.append(series_dict)
+
+    return series_data

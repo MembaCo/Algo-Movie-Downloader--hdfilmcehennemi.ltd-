@@ -19,13 +19,11 @@ from flask import (
     flash,
     session,
     jsonify,
-    g,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 from dotenv import load_dotenv
 
 import config
-
 from database import (
     get_db,
     setup_database,
@@ -47,7 +45,6 @@ if app.logger.handlers:
     app.logger.removeHandler(app.logger.handlers[0])
 app.logger = logger
 
-# Aktif prosesleri PID'leri ile birlikte takip etmek için bir sözlük
 active_processes = {}
 auto_download_manager_state = {"enabled": False, "thread": None}
 
@@ -81,7 +78,6 @@ def auto_download_manager():
     while auto_download_manager_state.get("enabled", False):
         try:
             with app.app_context():
-                # Aktif prosesler listesini yöneticiye veriyoruz
                 services.run_auto_download_cycle(active_processes)
         except Exception as e:
             logger.error(f"Otomatik indirme yöneticisinde hata: {e}", exc_info=True)
@@ -126,18 +122,17 @@ def logout():
 
 @app.route("/")
 def index():
-    db = get_db()
-    videos = db.execute("SELECT * FROM videos ORDER BY created_at DESC").fetchall()
-    return render_template("index.html", videos=videos, version=config.VERSION)
+    return render_template("index.html", version=config.VERSION)
 
 
-@app.route("/add", methods=["POST"])
-def add_video():
+# --- FİLM ROTALARI ---
+@app.route("/add_movie", methods=["POST"])
+def add_movie():
     url = request.form["url"]
     if config.ALLOWED_DOMAIN not in url:
         flash(f"Lütfen geçerli bir {config.ALLOWED_DOMAIN} linki girin.", "warning")
         return redirect(url_for("index"))
-    success, message = services.add_video_to_queue(url)
+    success, message = services.add_movie_to_queue(url)
     flash(message, "success" if success else "danger")
     return redirect(url_for("index"))
 
@@ -149,11 +144,102 @@ def add_list():
         flash(f"Lütfen geçerli bir {config.ALLOWED_DOMAIN} linki girin.", "warning")
         return redirect(url_for("index"))
     thread = threading.Thread(
-        target=services.add_videos_from_list_page_async, args=(app, list_url)
+        target=services.add_movies_from_list_page_async, args=(app, list_url)
     )
     thread.daemon = True
     thread.start()
     flash("Toplu ekleme işlemi arka planda başlatıldı...", "info")
+    return redirect(url_for("index"))
+
+
+@app.route("/movie/start/<int:movie_id>", methods=["POST"])
+def start_movie_download(movie_id):
+    success, message = services.start_download(movie_id, "movie", active_processes)
+    flash(message, "info" if success else "warning")
+    return redirect(url_for("index"))
+
+
+@app.route("/movie/stop/<int:movie_id>", methods=["POST"])
+def stop_movie_download(movie_id):
+    success, message = services.stop_download(movie_id, "movie")
+    flash(message, "info" if success else "danger")
+    return redirect(url_for("index"))
+
+
+@app.route("/movie/delete/<int:movie_id>", methods=["POST"])
+def delete_movie(movie_id):
+    services.delete_record(movie_id, "movie", active_processes)
+    flash("Film kaydı başarıyla silindi.", "success")
+    return redirect(url_for("index"))
+
+
+@app.route("/movie/delete_file/<int:movie_id>", methods=["POST"])
+def delete_movie_file(movie_id):
+    success, message = services.delete_item_file(movie_id, "movie")
+    flash(message, "success" if success else "danger")
+    return redirect(url_for("index"))
+
+
+# --- DİZİ ROTALARI ---
+@app.route("/add_series", methods=["POST"])
+def add_series():
+    series_url = request.form["series_url"]
+    if config.ALLOWED_DOMAIN not in series_url:
+        flash(f"Lütfen geçerli bir {config.ALLOWED_DOMAIN} linki girin.", "warning")
+        return redirect(url_for("index"))
+
+    thread = threading.Thread(
+        target=services.add_series_to_queue_async, args=(app, series_url)
+    )
+    thread.daemon = True
+    thread.start()
+
+    flash(
+        "Dizi ekleme işlemi arka planda başlatıldı. Bölümler kısa süre içinde listelenecektir.",
+        "info",
+    )
+    return redirect(url_for("index"))
+
+
+@app.route("/series/delete/<int:series_id>", methods=["POST"])
+def delete_series(series_id):
+    success, message = services.delete_series_record(series_id, active_processes)
+    flash(message, "success" if success else "danger")
+    return redirect(url_for("index"))
+
+
+@app.route("/series/start/<int:series_id>", methods=["POST"])
+def start_series_download(series_id):
+    success, message = services.start_all_episodes_for_series(series_id)
+    flash(message, "success" if success else "warning")
+    return redirect(url_for("index"))
+
+
+@app.route("/episode/start/<int:episode_id>", methods=["POST"])
+def start_episode_download(episode_id):
+    success, message = services.start_download(episode_id, "episode", active_processes)
+    flash(message, "info" if success else "warning")
+    return redirect(url_for("index"))
+
+
+@app.route("/episode/stop/<int:episode_id>", methods=["POST"])
+def stop_episode_download(episode_id):
+    success, message = services.stop_download(episode_id, "episode")
+    flash(message, "info" if success else "danger")
+    return redirect(url_for("index"))
+
+
+@app.route("/episode/delete/<int:episode_id>", methods=["POST"])
+def delete_episode(episode_id):
+    services.delete_record(episode_id, "episode", active_processes)
+    flash("Bölüm kaydı başarıyla silindi.", "success")
+    return redirect(url_for("index"))
+
+
+@app.route("/episode/delete_file/<int:episode_id>", methods=["POST"])
+def delete_episode_file(episode_id):
+    success, message = services.delete_item_file(episode_id, "episode")
+    flash(message, "success" if success else "danger")
     return redirect(url_for("index"))
 
 
@@ -164,6 +250,9 @@ def settings():
         settings_updated = False
         update_setting("DOWNLOADS_FOLDER", request.form["downloads_folder"], db)
         update_setting("FILENAME_TEMPLATE", request.form["filename_template"], db)
+        update_setting(
+            "SERIES_FILENAME_TEMPLATE", request.form["series_filename_template"], db
+        )
         update_setting("CONCURRENT_DOWNLOADS", request.form["concurrent_downloads"], db)
         update_setting("SPEED_LIMIT", request.form["speed_limit"], db)
         settings_updated = True
@@ -197,39 +286,13 @@ def settings():
     return render_template("settings.html", settings=current_settings)
 
 
-@app.route("/start/<int:video_id>", methods=["POST"])
-def start_download(video_id):
-    success, message = services.start_download_for_video(video_id, active_processes)
-    flash(message, "info" if success else "warning")
-    return redirect(url_for("index"))
-
-
-@app.route("/stop/<int:video_id>", methods=["POST"])
-def stop_download(video_id):
-    success, message = services.stop_download_for_video(video_id)
-    flash(message, "info" if success else "danger")
-    return redirect(url_for("index"))
-
-
-@app.route("/delete/<int:video_id>", methods=["POST"])
-def delete_video(video_id):
-    services.delete_video_record(video_id, active_processes)
-    flash("Video kaydı başarıyla silindi.", "success")
-    return redirect(url_for("index"))
-
-
-@app.route("/delete_file/<int:video_id>", methods=["POST"])
-def delete_file(video_id):
-    success, message = services.delete_video_file(video_id)
-    flash(message, "success" if success else "danger")
-    return redirect(url_for("index"))
-
-
 @app.route("/toggle_auto_download", methods=["POST"])
 def toggle_auto_download():
     is_enabled = auto_download_manager_state["enabled"]
     if is_enabled:
         auto_download_manager_state["enabled"] = False
+        if auto_download_manager_state["thread"]:
+            auto_download_manager_state["thread"].join()  # Thread'in bitmesini bekle
         flash("Otomatik indirme pasif hale getirildi.", "info")
         logger.info("Otomatik indirme durumu: PASİF")
     else:
@@ -246,10 +309,14 @@ def toggle_auto_download():
 def status_api():
     if not session.get("logged_in"):
         return jsonify({"error": "Unauthorized"}), 401
-    videos_data = services.get_all_videos_status()
+
+    movies_data = services.get_all_movies_status()
+    series_data = services.get_all_series_status()
+
     return jsonify(
         {
-            "videos": videos_data,
+            "movies": movies_data,
+            "series": series_data,
             "auto_download_enabled": auto_download_manager_state["enabled"],
         }
     )
@@ -262,7 +329,7 @@ if __name__ == "__main__":
     sync_password_hash_from_env()
     with app.app_context():
         downloads_folder = get_setting("DOWNLOADS_FOLDER")
-        if not os.path.exists(downloads_folder):
+        if downloads_folder and not os.path.exists(downloads_folder):
             os.makedirs(downloads_folder)
     logger.info("Uygulama başlatılıyor...")
     app.run(debug=True, host="0.0.0.0", port=5000, use_reloader=False)
